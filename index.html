@@ -150,6 +150,15 @@
     .history-date { font-size: 0.8rem; color: var(--text-muted); }
     .history-actions { display: flex; gap: 8px; }
     .btn-xs { padding: 6px 10px; font-size: 12px; }
+    .event-name-input {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--primary);
+      background: transparent;
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+    }
+    .event-name-input:disabled { opacity: 0.6; }
 
   </style>
 </head>
@@ -197,7 +206,10 @@
       </div>
 
       <div class="card" style="border: 1px solid var(--primary);">
-        <h2 id="currentEventTitle" style="color: var(--primary); font-size: 1.5rem;">...</h2>
+        <div class="input-group" style="margin-bottom: 6px;">
+          <label class="input-label">Nom de l'esdeveniment</label>
+          <input type="text" id="currentEventNameInput" class="event-name-input" placeholder="Nou Pressupost" oninput="updateEventName(this.value)">
+        </div>
         <div style="font-size: 11px; opacity: 0.6; margin-top: 5px; font-family: monospace; color: var(--text-muted);">ID: <span id="displayEventId">...</span></div>
       </div>
 
@@ -230,7 +242,7 @@
     </div>
 
     <div id="createBtnContainer" class="new-event-btn-container hidden">
-        <button class="btn btn-new-float" onclick="resetToCreate()">➕ Crear Nou / Arxivar Actual</button>
+        <button class="btn btn-new-float" onclick="startNewBudget()">➕ Nou Pressupost</button>
     </div>
   </div>
 
@@ -358,6 +370,35 @@
       });
     }
 
+    function startNewBudget() {
+      if (isHistoryMode) return alert("No pots crear un nou pressupost des de l'historial.");
+      if (hasUnsavedChanges && !confirm("Tens canvis sense guardar. Vols continuar i arxivar l'actual?")) return;
+      document.getElementById('appStatus').textContent = "🗄️ Arxivant...";
+      const newData = { name: "Nou Pressupost", participants: [] };
+      const payload = { action: 'archive', data: newData };
+      fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) }).then(r => r.text()).then(resp => {
+        if(resp.includes("OK")) {
+          state.name = newData.name;
+          state.participants = newData.participants;
+          isHistoryMode = false;
+          hasUnsavedChanges = false;
+          updateUnsavedDot();
+          document.getElementById('historyBanner').classList.add('hidden');
+          document.getElementById('addRowSection').classList.remove('hidden');
+          document.querySelectorAll('input').forEach(el => el.disabled = false);
+          document.getElementById('step1').classList.add('hidden');
+          document.getElementById('step2').classList.remove('hidden');
+          document.getElementById('bottomBar').classList.remove('hidden');
+          document.getElementById('createBtnContainer').classList.remove('hidden');
+          render();
+          showToast("✅ Nou pressupost creat!", "success");
+          document.getElementById('appStatus').textContent = "Actiu";
+        } else {
+          alert("Error creant nou pressupost.");
+        }
+      });
+    }
+
     function showHistoryModal() {
       var container = document.getElementById('historyListContent'); container.innerHTML = '';
       if (cachedHistory.length === 0) { container.innerHTML = '<p style="color:var(--text-muted); padding:20px;">No hi ha historial.</p>'; } else {
@@ -399,6 +440,12 @@
         document.getElementById('createBtnContainer').classList.add('hidden'); document.getElementById('step1').classList.remove('hidden');
     }
 
+    function updateEventName(value) {
+      if (isHistoryMode) return;
+      state.name = value.trim() || "Nou Pressupost";
+      markAsChanged();
+    }
+
     function markAsChanged() { if(!isHistoryMode) { hasUnsavedChanges = true; updateUnsavedDot(); } }
     function updateUnsavedDot() { const dot = document.getElementById('unsavedDot'); if(hasUnsavedChanges) dot.classList.remove('hidden'); else dot.classList.add('hidden'); }
     function showToast(msg, type = 'normal') { const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast show ' + type; setTimeout(() => t.className = 'toast', 3000); }
@@ -410,7 +457,12 @@
     function removeParticipant(idx) { if(isHistoryMode) return; if(confirm("Eliminar?")) { state.participants.splice(idx,1); render(); markAsChanged(); } }
 
     function render() {
-      document.getElementById('currentEventTitle').textContent = state.name; document.getElementById('displayEventId').textContent = "botarell-actiu";
+      const nameInput = document.getElementById('currentEventNameInput');
+      const safeName = state.name && state.name.trim() ? state.name : "Nou Pressupost";
+      nameInput.value = safeName;
+      state.name = safeName;
+      nameInput.disabled = isHistoryMode;
+      document.getElementById('displayEventId').textContent = "botarell-actiu";
       let totalExp = 0, totalMeals = 0; const list = document.getElementById('participantsList'); list.innerHTML = '';
       state.participants.forEach((p, i) => {
         const pTotal = p.expenses.reduce((a,b)=>a+b,0); totalExp+=pTotal; totalMeals+=p.meals;
